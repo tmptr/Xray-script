@@ -2284,6 +2284,33 @@ EOF
     xray_is_installed=1
     [ $nginx_is_installed -eq 1 ] && is_installed=1 || is_installed=0
 }
+#安装/更新Xray beta
+install_update_xray_beta
+{
+    green "正在安装/更新Xray。。。。"
+    if ! bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root --without-geodata --without-logfiles --beta && ! bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install -u root --without-geodata --without-logfiles --beta; then
+        red    "安装/更新Xray失败"
+        yellow "按回车键继续或者按Ctrl+c终止"
+        read -s
+        return 1
+    fi
+    if ! grep -q "# This file has been edited by Xray-TLS-Web setup script" /etc/systemd/system/xray.service; then
+cat >> /etc/systemd/system/xray.service <<EOF
+
+# This file has been edited by Xray-TLS-Web setup script
+[Service]
+ExecStartPre=/bin/rm -rf /dev/shm/xray
+ExecStartPre=/bin/mkdir /dev/shm/xray
+ExecStartPre=/bin/chmod 711 /dev/shm/xray
+ExecStopPost=/bin/rm -rf /dev/shm/xray
+EOF
+        systemctl daemon-reload
+        systemctl -q is-active xray && systemctl restart xray
+    fi
+    systemctl enable xray
+    xray_is_installed=1
+    [ $nginx_is_installed -eq 1 ] && is_installed=1 || is_installed=0
+}
 
 #获取证书 参数: 域名位置
 get_cert()
@@ -4000,6 +4027,7 @@ start_menu()
     tyblue "  26. 尝试修复退格键无法使用的问题"
     purple "         部分ssh工具(如Xshell)可能有这类问题"
     tyblue "  27. 修改dns"
+    tyblue "  28. 更新Xray Beta"
     yellow "  0. 退出脚本"
     echo
     echo
@@ -4072,6 +4100,12 @@ start_menu()
         check_important_dependence_installed curl curl
         install_update_xray
         green "Xray更新完成！"
+    elif [ $choice -eq 28 ]; then
+        [ "$redhat_package_manager" == "yum" ] && check_important_dependence_installed "" "yum-utils"
+        check_SELinux
+        check_important_dependence_installed ca-certificates ca-certificates
+        check_important_dependence_installed curl curl
+        install_update_xray_beta
     elif [ $choice -eq 10 ]; then
         ! ask_if "确定要删除吗?(y/n)" && return 0
         [ "$redhat_package_manager" == "yum" ] && check_important_dependence_installed "" "yum-utils"
